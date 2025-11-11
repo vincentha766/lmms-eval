@@ -76,6 +76,7 @@ dependencies = [
     "sentence_transformers",
     "python-dotenv",
     "qwen-vl-utils>=0.0.14",
+    "torchcodec>=0.8.1",
 ]
 
 [project.optional-dependencies]
