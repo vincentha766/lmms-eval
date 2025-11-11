@@ -95,6 +95,7 @@ AVAILABLE_CHAT_TEMPLATE_MODELS = {
     "llava_hf": "LlavaHf",
     "qwen3_vl": "Qwen3_VL",
     "qwen2_5_vl": "Qwen2_5_VL",
+    "qts_plus_3b": "QTSPlus3B",
     "thyme": "Thyme",
     "openai_compatible": "OpenAICompatible",
     "vllm": "VLLM",
