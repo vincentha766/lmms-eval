@@ -67,7 +67,7 @@ class QTSPlus3B(lmms):
             pretrained,
             trust_remote_code=True,
             local_files_only=True,
-        ).to(dtype=torch.float16, device=device)
+        ).to(dtype=torch.bfloat16, device=device)
         self._model.eval()
 
         # Load processor and tokenizer
@@ -75,6 +75,7 @@ class QTSPlus3B(lmms):
             pretrained,
             trust_remote_code=True,
             local_files_only=True,
+            use_fast=True,
         )
         self._tokenizer = AutoTokenizer.from_pretrained(pretrained, trust_remote_code=True)
 
