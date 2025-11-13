@@ -63,11 +63,13 @@ class QTSPlus3B(lmms):
         self.device_map = device_map if device_map else device
 
         # Load the model
+        load_dtype = torch.bfloat16 if device == "cuda" else torch.float32
         self._model = AutoModelForCausalLM.from_pretrained(
             pretrained,
             trust_remote_code=True,
             local_files_only=True,
-        ).to(dtype=torch.bfloat16, device=device)
+            torch_dtype=load_dtype,
+        ).to(device=device)
         self._model.eval()
 
         # Load processor and tokenizer
