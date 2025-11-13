@@ -52,3 +52,5 @@ workspace/*
 .claude/*
 remote_code/*
 .envrc
+
+src/
