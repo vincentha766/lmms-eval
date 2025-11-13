@@ -62,7 +62,7 @@ case $MODEL in
         MODEL_ARGS="pretrained=Qwen/Qwen2.5-VL-3B-Instruct,max_pixels=$MAX_PIXELS,interleave_visuals=False"
         ;;
     "qts_plus_3b")
-        MODEL_ARGS="pretrained=/home/huanan/work/QTSplusQwenVL2_5-3B/QTSplusQwenVL2_5,max_pixels=$MAX_PIXELS"
+        MODEL_ARGS="pretrained=/home/huanan/work/projects/QTS-3B/model-1112/,max_pixels=$MAX_PIXELS"
         ;;
     *)
         # For custom models, check if model args are provided via env var
