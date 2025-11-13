@@ -53,3 +53,5 @@ workspace/*
 remote_code/*
 .opencode
 .envrc
+
+src/
