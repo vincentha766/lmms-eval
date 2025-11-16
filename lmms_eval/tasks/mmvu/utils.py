@@ -174,7 +174,7 @@ Return only "1" or "0" with no additional text or formatting."""
         # Parse the result
         if result["success"]:
             judge_response = result["result"]
-            judge_score = judge_response.strip()
+            judge_score = str(judge_response).strip()
         else:
             eval_logger.error(f"Judge evaluation failed: {result.get('raw_response', 'Unknown error')}")
             judge_score = "0"
