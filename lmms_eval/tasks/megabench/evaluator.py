@@ -365,7 +365,8 @@ class MEGABenchEvaluator:
         Since the results file is long, this avoid breaking the file in case of a crash.
         """
         # Create output directory if it doesn't exist
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        if os.path.dirname(file_path):
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
         temp_filename = f"{file_path}.tmp"
         with open(temp_filename, "w", encoding="utf-8") as f:
