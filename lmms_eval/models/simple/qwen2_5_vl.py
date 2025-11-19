@@ -343,7 +343,8 @@ class Qwen2_5_VL(lmms):
                 clean_ans = parse_reasoning_model_answer(ans)
                 res.append(clean_ans)
                 self.cache_hook.add_partial("generate_until", (context, gen_kwargs), clean_ans)
-                pbar.update(1)
+
+            pbar.update(1)
 
                 # eval_logger.debug(f"Question: {context}")
                 # eval_logger.debug(f"Model Raw Response: {ans}")
