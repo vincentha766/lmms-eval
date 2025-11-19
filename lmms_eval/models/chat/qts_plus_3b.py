@@ -276,11 +276,12 @@ class QTSPlus3B(lmms):
                 clean_ans = parse_reasoning_model_answer(ans)
                 res.append(clean_ans)
                 self.cache_hook.add_partial("generate_until", (context, gen_kwargs), clean_ans)
-                pbar.update(1)
 
                 eval_logger.debug(f"Question: {context}")
                 eval_logger.debug(f"Model Raw Response: {ans}")
                 eval_logger.debug(f"Model Clean Response: {clean_ans}")
+
+            pbar.update(1)
             # reorder this group of results back to original unsorted form
         res = re_ords.get_original(res)
 
