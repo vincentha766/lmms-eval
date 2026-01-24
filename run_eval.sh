@@ -20,8 +20,6 @@ LOG_SAMPLES=${LMMS_LOG_SAMPLES:-$DEFAULT_LOG_SAMPLES}
 OUTPUT_PATH=${LMMS_OUTPUT_PATH:-$DEFAULT_OUTPUT_PATH}
 DRY_RUN=${LMMS_DRY_RUN:-$DEFAULT_DRY_RUN}
 
-export HF_HOME=/home/huanan/.cache/huggingface/
-
 # Override with command-line arguments if provided
 while [[ "$#" -gt 0 ]]; do
     case $1 in
