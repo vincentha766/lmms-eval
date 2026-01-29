@@ -75,13 +75,13 @@ case $MODEL in
         MODEL_ARGS="pretrained=/home/huanan/work/projects/QTS-3B/model-1112/,max_pixels=$MAX_PIXELS"
         ;;
     "qts_llava_video")
-        MODEL_ARGS="pretrained=AlpachinoNLP/QTSplus-LLaVA-Video-7B-Qwen2,fps=1.0,max_frames=16,max_new_tokens=256"
+        MODEL_ARGS="pretrained=AlpachinoNLP/QTSplus-LLaVA-Video-7B-Qwen2,fps=1.0,max_frames=40,max_new_tokens=256"
         ;;
     "qts_internvl")
-        MODEL_ARGS="pretrained=AlpachinoNLP/QTSplus-InternVL2.5-8B,num_frames=16"
+        MODEL_ARGS="pretrained=AlpachinoNLP/QTSplus-InternVL2.5-8B,num_frames=40"
         ;;
     "internvl2_5")
-        MODEL_ARGS="pretrained=/root/autodl-tmp/InternVL2_5-8B,num_frames=16"
+        MODEL_ARGS="pretrained=/root/autodl-tmp/InternVL2_5-8B,num_frames=40"
         ;;
     *)
         # For custom models, check if model args are provided via env var

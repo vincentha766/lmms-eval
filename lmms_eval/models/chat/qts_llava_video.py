@@ -7,12 +7,20 @@ through frame extraction and processing.
 
 Example usage:
 ```
+# Single GPU
 python -m lmms_eval \
     --model qts_llava_video \
     --model_args pretrained=AlpachinoNLP/QTSplus-LLaVA-Video-7B-Qwen2,fps=1.0,max_frames=15 \
     --tasks videomme,mlvu \
     --batch_size 1 \
     --device cuda:0
+
+# Multi-GPU with accelerate
+accelerate launch --num_processes=8 -m lmms_eval \
+    --model qts_llava_video \
+    --model_args pretrained=AlpachinoNLP/QTSplus-LLaVA-Video-7B-Qwen2,fps=1.0,max_frames=15 \
+    --tasks videomme,mlvu \
+    --batch_size 1
 ```
 """
 
@@ -23,6 +31,8 @@ import time
 from typing import List, Optional, Tuple, Union
 
 import torch
+from accelerate import Accelerator, DistributedType
+from accelerate.state import AcceleratorState
 from loguru import logger as eval_logger
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoProcessor
@@ -49,7 +59,7 @@ class QTSLlavaVideo(lmms):
     Args:
         pretrained: Path or name of the pretrained model
         device: Device to run the model on (default: "cuda")
-        device_map: Device map for model parallelism (default: "auto")
+        device_map: Device map for model parallelism (default: "" for auto-assignment in multi-GPU)
         batch_size: Batch size for inference (default: 1)
         fps: Frames per second for video sampling (default: 1.0)
         max_frames: Maximum number of frames to extract from video (default: 15)
@@ -63,7 +73,7 @@ class QTSLlavaVideo(lmms):
         self,
         pretrained: str = "AlpachinoNLP/QTSplus-LLaVA-Video-7B-Qwen2",
         device: Optional[str] = "cuda",
-        device_map: Optional[str] = "auto",
+        device_map: Optional[str] = "",
         batch_size: Optional[Union[int, str]] = 1,
         fps: float = 1.0,
         max_frames: int = 15,
@@ -75,22 +85,32 @@ class QTSLlavaVideo(lmms):
         """Initialize the QTSplus-LLaVA-Video model."""
         super().__init__()
 
-        self._device = torch.device(device)
-        self.device_map = device_map if device_map else device
+        # Initialize accelerator for distributed training support
+        accelerator = Accelerator()
+
+        # Determine device and device_map based on distributed setup
+        if accelerator.num_processes > 1 and device_map == "":
+            # Multi-process mode: assign each process to its own GPU
+            self._device = torch.device(f"cuda:{accelerator.local_process_index}")
+            self.device_map = f"cuda:{accelerator.local_process_index}"
+        else:
+            # Single process mode or custom device_map
+            self._device = torch.device(device)
+            self.device_map = device_map
 
         # Determine dtype based on device availability
-        dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+        load_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
         eval_logger.info(f"Loading QTSplus-LLaVA-Video model from {pretrained}")
-        eval_logger.info(f"Using dtype: {dtype}, device: {device}")
+        eval_logger.info(f"Using dtype: {load_dtype}, device_map: {self.device_map}")
 
-        # Load model with error handling for dtype parameter name
+        # Load model with device_map
         try:
             self._model = AutoModelForCausalLM.from_pretrained(
                 pretrained,
                 trust_remote_code=trust_remote_code,
-                dtype=dtype,
-                device_map=device_map if torch.cuda.is_available() else None,
+                dtype=load_dtype,
+                device_map=self.device_map,
                 low_cpu_mem_usage=True,
             ).eval()
         except TypeError:
@@ -98,8 +118,8 @@ class QTSLlavaVideo(lmms):
             self._model = AutoModelForCausalLM.from_pretrained(
                 pretrained,
                 trust_remote_code=trust_remote_code,
-                torch_dtype=dtype,
-                device_map=device_map if torch.cuda.is_available() else None,
+                torch_dtype=load_dtype,
+                device_map=self.device_map,
                 low_cpu_mem_usage=True,
             ).eval()
 
@@ -117,12 +137,56 @@ class QTSLlavaVideo(lmms):
         self.use_cache = use_cache
         self.trust_remote_code = trust_remote_code
 
-        eval_logger.info(f"Model initialized with fps={fps}, max_frames={max_frames}")
+        # Handle distributed setup
+        if accelerator.num_processes > 1 and device_map == "":
+            assert accelerator.distributed_type in [
+                DistributedType.FSDP,
+                DistributedType.MULTI_GPU,
+                DistributedType.DEEPSPEED,
+            ], "Unsupported distributed type provided. Only DDP, FSDP and DEEPSPEED are supported."
+
+            if accelerator.distributed_type == DistributedType.DEEPSPEED:
+                kwargs = {
+                    "train_micro_batch_size_per_gpu": self.batch_size_per_gpu,
+                    "train_batch_size": self.batch_size_per_gpu * accelerator.num_processes,
+                }
+                AcceleratorState().deepspeed_plugin.deepspeed_config_process(must_match=True, **kwargs)
+                eval_logger.info("Detected DistributedType.DEEPSPEED. Make sure you run `accelerate config` and set zero stage to 0")
+
+            if accelerator.distributed_type == DistributedType.FSDP or accelerator.distributed_type == DistributedType.DEEPSPEED:
+                self._model = accelerator.prepare(self.model)
+            else:
+                self._model = accelerator.prepare_model(self.model, evaluation_mode=True)
+
+            self.accelerator = accelerator
+            if self.accelerator.is_local_main_process:
+                eval_logger.info(f"Using {accelerator.num_processes} devices with data parallelism")
+            self._rank = self.accelerator.local_process_index
+            self._world_size = self.accelerator.num_processes
+        elif accelerator.num_processes == 1 and device_map == "auto":
+            eval_logger.info(f"Using {accelerator.num_processes} devices with pipeline parallelism")
+            self._rank = 0
+            self._world_size = 1
+        else:
+            eval_logger.info(f"Using single device: {self._device}")
+            self.model.to(self._device)
+            self._rank = 0
+            self._world_size = 1
+
+        self.accelerator = accelerator
+
+        eval_logger.info(
+            f"Model initialized: fps={fps}, max_frames={max_frames}, "
+            f"rank={self._rank}, world_size={self._world_size}"
+        )
 
     @property
     def model(self):
-        """Return the underlying model."""
-        return self._model
+        """Return the underlying model, unwrapping it if using Accelerate."""
+        if hasattr(self, "accelerator"):
+            return self.accelerator.unwrap_model(self._model)
+        else:
+            return self._model
 
     @property
     def tokenizer(self):
@@ -146,8 +210,13 @@ class QTSLlavaVideo(lmms):
 
     @property
     def rank(self):
-        """Return the rank (single-process implementation)."""
-        return 0
+        """Return the rank (process rank in distributed mode)."""
+        return self._rank
+
+    @property
+    def world_size(self):
+        """Return the world size (number of processes)."""
+        return self._world_size
 
     def flatten(self, input_list: List[List]) -> List:
         """
@@ -264,34 +333,8 @@ class QTSLlavaVideo(lmms):
             ]
 
             # Log first prompt for debugging
-            if self.rank == 0 and doc_id[0] % 100 == 0:
+            if self.accelerator.is_main_process and doc_id[0] % 100 == 0:
                 eval_logger.debug(f"Prompt for doc ID {doc_id[0]}:\n{texts[0]}\n")
-
-            # CAPTURE REQUEST FOR REPRODUCTION
-            # Save the first request to a file for debugging/reproduction
-            if self.rank == 0 and len(res) == 0:  # Only save first request
-                import os
-                capture_file = os.path.join(os.getcwd(), "captured_request.json")
-                try:
-                    capture_data = {
-                        "video_paths": videos if isinstance(videos, list) else [videos] if videos else [],
-                        "text_prompts": texts,
-                        "fps": self.fps,
-                        "max_frames": self.max_frames,
-                        "gen_kwargs": {
-                            "max_new_tokens": gen_kwargs.get("max_new_tokens", self.max_new_tokens),
-                            "temperature": gen_kwargs.get("temperature", 0.0),
-                            "top_p": gen_kwargs.get("top_p", None),
-                            "num_beams": gen_kwargs.get("num_beams", 1),
-                            "do_sample": gen_kwargs.get("do_sample", False),
-                        },
-                        "model": self._model.config.name_or_path if hasattr(self._model.config, 'name_or_path') else "AlpachinoNLP/QTSplus-LLaVA-Video-7B-Qwen2",
-                    }
-                    with open(capture_file, "w") as f:
-                        json.dump(capture_data, f, indent=2)
-                    eval_logger.info(f"📝 Captured request saved to: {capture_file}")
-                except Exception as e:
-                    eval_logger.warning(f"Failed to capture request: {e}")
 
             # Process inputs with processor
             # The processor expects a single video path string (not a list)
@@ -311,13 +354,8 @@ class QTSLlavaVideo(lmms):
                 padding=False,
             )
 
-            # Move inputs to device
-            for k, v in list(inputs.items()):
-                if isinstance(v, torch.Tensor):
-                    if k == "vision_input" and v.is_floating_point():
-                        inputs[k] = v.to(device=self.model.device, dtype=self.model.dtype)
-                    else:
-                        inputs[k] = v.to(device=self.model.device)
+            # Move inputs to device and dtype
+            inputs = inputs.to(self._device, self.model.dtype)
 
             # Set up generation parameters
             default_gen_kwargs = {
@@ -384,7 +422,7 @@ class QTSLlavaVideo(lmms):
                 self.cache_hook.add_partial("generate_until", (text, gen_kwargs), clean_ans)
 
                 # Log for debugging
-                if self.rank == 0:
+                if self.accelerator.is_main_process:
                     eval_logger.debug(f"Question: {text}")
                     eval_logger.debug(f"Model Response: {clean_ans}")
 
