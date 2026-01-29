@@ -98,6 +98,7 @@ AVAILABLE_CHAT_TEMPLATE_MODELS = {
     "qts_plus_3b": "QTSPlus3B",
     "qts_llava_video": "QTSLlavaVideo",
     "qts_internvl": "QTSInternVL",
+    "new_qts_qwen": "NewQTSQwen",
     "internvl2_5": "InternVL2_5",
     "thyme": "Thyme",
     "openai_compatible": "OpenAICompatible",

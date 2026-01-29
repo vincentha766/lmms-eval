@@ -83,6 +83,9 @@ case $MODEL in
     "internvl2_5")
         MODEL_ARGS="pretrained=/root/autodl-tmp/InternVL2_5-8B,num_frames=40"
         ;;
+    "new_qts_qwen")
+        MODEL_ARGS="pretrained=AlpachinoNLP/QTSplus-Qwen2.5-VL-7B,fps=1.0,max_frames=40,max_pixels=$MAX_PIXELS"
+        ;;
     *)
         # For custom models, check if model args are provided via env var
         if [[ -n "${LMMS_MODEL_ARGS}" ]]; then
