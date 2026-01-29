@@ -4,7 +4,7 @@ dataset_kwargs:
   cache_dir: videomme
   video: True
   # From_YouTube: True
-task: videomme
+task: videomme_original
 test_split: test
 output_type: generate_until
 cluster_key: videoID  # For clustered SE calculation - questions from same video are correlated
